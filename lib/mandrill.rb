@@ -14,7 +14,25 @@ module Mandrill
             @host = 'https://mandrillapp.com'
             @path = '/api/1.0/'
 
-            @session = Excon.new @host
+            # IPv6を優先して使うようにする
+            prefers_ipv6_dns_resolver = Class.new(Resolv::DNS) do
+                def each_address(name)
+                    return super unless use_ipv6?
+                    addresses = []
+                    super do |address|
+                        if Resolv::IPv6::Regex =~ address
+                            addresses.unshift address
+                        else
+                            addresses << resource.address
+                        end
+                    end
+                    addresses.each {|address| yield address}
+                    true
+                end
+            end.new
+            resolver = Resolv.new([Resolv::Hosts.new, prefers_ipv6_dns_resolver])
+
+            @session = Excon.new @host, resolv_resolver: resolver
             @debug = debug
 
             if not apikey
